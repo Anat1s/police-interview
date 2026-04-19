@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+}
+
+body {
+  margin: 0;
+  background-color: #0f172a; /* 슬레이트 900 색상 */
+  color: #f8fafc;
+  -webkit-font-smoothing: antialiased;
+}
