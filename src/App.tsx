@@ -1,55 +1,37 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck, Lock, RefreshCw, RotateCcw, CheckCircle2, Home, Megaphone, UserCheck } from 'lucide-react';
+import { ShieldCheck, Lock, RefreshCw, RotateCcw, CheckCircle2, Home, Megaphone, UserCheck, Download, ClipboardList, Star, Volume2 } from 'lucide-react';
 
 // ==========================================
-// 🎙️ [음성 출력(TTS) 도우미 함수]
-// 브라우저 내장 기능을 이용해 면접관처럼 질문을 읽어줍니다.
+// 🎙️ [음성 출력(TTS) 함수]
 // ==========================================
 const speakText = (text: string) => {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel(); // 기존에 나오던 음성이 있다면 즉시 중단
-  
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'ko-KR';
-  utterance.rate = 0.95; // 면접관처럼 살짝 진중하고 또렷한 속도
-  utterance.pitch = 0.9; // 약간 차분한 톤
-  
-  window.speechSynthesis.speak(utterance);
+  if (typeof window !== 'undefined' && window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'ko-KR';
+    utterance.rate = 0.95; // 살짝 진중한 속도
+    utterance.pitch = 0.9;
+    
+    // 한국어 보이스 매칭
+    const voices = window.speechSynthesis.getVoices();
+    const koVoice = voices.find(v => v.lang.includes('KR') || v.lang.includes('ko'));
+    if (koVoice) utterance.voice = koVoice;
+
+    window.speechSynthesis.speak(utterance);
+  }
 };
 
 // ==========================================
-// 🔐 [권한 관리 시스템] 허가된 사용자 명단
+// 🔐 [권한 관리 시스템] 27인 명단
 // ==========================================
 const AUTHORIZED_USERS: Record<string, string> = {
-  "0817": "정덕경", // 관리자1
-  "2673": "정은빈", // 관리자2
-  "2048": "강민지",
-  "7193": "이태호",
-  "5821": "황희태",
-  "3604": "김현희",
-  "8472": "오해람",
-  "1956": "최정규",
-  "4380": "남지윤",
-  "0359": "심주혜",
-  "2830": "진민영",
-  "0223": "이수빈", // 승기 여친
-
-  // --- 온라인 특강반 ---
-  "3192": "김영선",
-  "8504": "김진이",
-  "4721": "나한결",
-  "7619": "민희경",
-  "5283": "양연주",
-  "9350": "이대희",
-  "2594": "이민찬",
-  "7777": "올킬면접 조교", // 특별 번호
-  "8162": "이언지",
-  "5947": "이현지",
-  "4026": "이혜원",
-  "7310": "장보경",
-  "2158": "조윤정",
-  "6903": "하지향",
-  "1582": "홍서린"
+  "0817": "정덕경", "2673": "정은빈", "2048": "강민지", "7193": "이태호",
+  "5821": "황희태", "3604": "김현희", "8472": "오해람", "1956": "최정규",
+  "4380": "남지윤", "0359": "심주혜", "2830": "진민영", "0223": "이수빈",
+  "3192": "김영선", "8504": "김진이", "4721": "나한결", "7619": "민희경",
+  "5283": "양연주", "9350": "이대희", "2594": "이민찬", "7777": "올킬면접 조교",
+  "8162": "이언지", "5947": "이현지", "4026": "이혜원", "7310": "장보경",
+  "2158": "조윤정", "6903": "하지향", "1582": "홍서린"
 };
 
 // 1. 발표면접 주제 (1~8번 통합)
@@ -302,12 +284,11 @@ interface PersonalityAudio {
 export default function App() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
+  const [userName, setUserName] = useState('');
   const [isError, setIsError] = useState(false);
-  const [userName, setUserName] = useState<string>('');
-
+  
   const [interviewType, setInterviewType] = useState<InterviewType>('personality'); 
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
-  
   const [secondsLeft, setSecondsLeft] = useState(180);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   
@@ -315,40 +296,35 @@ export default function App() {
   const [selectedFollowups, setSelectedFollowups] = useState<string[]>([]);
   const [currentFollowupIdx, setCurrentFollowupIdx] = useState(0);
   const [presentationAudio, setPresentationAudio] = useState<string | null>(null);
-  const [followupAudios, setFollowupAudios] = useState<{question: string, url: string}[]>([]);
+  const [followupAudios, setFollowupAudios] = useState<any[]>([]);
   
   const [selectedPersonality, setSelectedPersonality] = useState<SelectedQuestion[]>([]);
   const [currentPersonalityIdx, setCurrentPersonalityIdx] = useState(0);
   const [currentTailIdx, setCurrentTailIdx] = useState(-1); 
   const [personalityAudios, setPersonalityAudios] = useState<PersonalityAudio[]>([]);
 
-  const [isRecording, setIsRecording] = useState(false);
+  // 📝 자가 진단 메모 및 점수
+  const [feedbackNotes, setFeedbackNotes] = useState<Record<string, string>>({});
+  const [scores, setScores] = useState<Record<string, number>>({});
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // 🎙️ [TTS 연동] 발표면접 음성 출력 
+  // 🎙️ 음성 출력 트리거 (Effect)
   useEffect(() => {
+    if (!isAuthorized) return;
     if (viewMode === 'presentation') {
       speakText(`발표면접 주제입니다. ${currentTopic.title}. ${currentTopic.content}`);
     } else if (viewMode === 'followup') {
       speakText(`꼬리질문입니다. ${selectedFollowups[currentFollowupIdx]}`);
+    } else if (viewMode === 'personality_active') {
+      const q = selectedPersonality[currentPersonalityIdx];
+      if (q) {
+        const text = currentTailIdx === -1 ? `질문입니다. ${q.q}` : `꼬리질문입니다. ${q.tails[currentTailIdx]}`;
+        speakText(text);
+      }
     }
-  }, [viewMode, currentFollowupIdx, currentTopic, selectedFollowups]);
-
-  // 🎙️ [TTS 연동] 인성면접 음성 출력
-  useEffect(() => {
-    if (viewMode === 'personality_active') {
-      const currentQ = selectedPersonality[currentPersonalityIdx];
-      if (!currentQ) return;
-      
-      const textToSpeak = currentTailIdx === -1 
-        ? `질문입니다. ${currentQ.q}` 
-        : `꼬리질문입니다. ${currentQ.tails[currentTailIdx]}`;
-        
-      speakText(textToSpeak);
-    }
-  }, [viewMode, currentPersonalityIdx, currentTailIdx, selectedPersonality]);
-
+  }, [viewMode, currentFollowupIdx, currentPersonalityIdx, currentTailIdx, isAuthorized, currentTopic, selectedFollowups, selectedPersonality]);
 
   useEffect(() => { 
     setupRandomPresentation(); 
@@ -378,14 +354,30 @@ export default function App() {
     else setupRandomPersonality();
   };
 
+  const unlockAudio = () => { if (window.speechSynthesis) window.speechSynthesis.speak(new SpeechSynthesisUtterance("")); };
+
   const handleAuth = (e: React.FormEvent) => {
     e.preventDefault();
     if (AUTHORIZED_USERS[passwordInput]) {
+      unlockAudio();
       setUserName(AUTHORIZED_USERS[passwordInput]);
       setIsAuthorized(true);
     } else {
       setIsError(true);
       setTimeout(() => setIsError(false), 2000);
+    }
+  };
+
+  const startInterview = () => {
+    unlockAudio();
+    setFeedbackNotes({});
+    setScores({});
+    if (interviewType === 'presentation') {
+      setPresentationAudio(null); setFollowupAudios([]); setSecondsLeft(180); setViewMode('presentation');
+      setIsTimerRunning(true); startRecording();
+    } else {
+      setPersonalityAudios([]); setCurrentPersonalityIdx(0); setCurrentTailIdx(-1); setSecondsLeft(60); 
+      setViewMode('personality_active'); setIsTimerRunning(true); startRecording();
     }
   };
 
@@ -413,7 +405,7 @@ export default function App() {
   };
 
   const handleQuitInterview = () => {
-    if (window.speechSynthesis) window.speechSynthesis.cancel(); // 🎙️ 홈으로 갈 때 음성 끄기
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.onstop = null; 
       mediaRecorderRef.current.stop();
@@ -425,7 +417,7 @@ export default function App() {
   };
 
   const handleCompleteStep = () => {
-    if (window.speechSynthesis) window.speechSynthesis.cancel(); // 🎙️ 다음으로 넘어갈 때 기존 음성 끄기
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
@@ -440,17 +432,10 @@ export default function App() {
     setIsTimerRunning(false);
     setTimeout(() => {
       if (viewMode === 'presentation') {
-        setViewMode('followup');
-        setCurrentFollowupIdx(0);
-        setSecondsLeft(60);
-        setIsTimerRunning(true);
-        startRecording();
+        setViewMode('followup'); setCurrentFollowupIdx(0); setSecondsLeft(60); setIsTimerRunning(true); startRecording();
       } else if (viewMode === 'followup') {
         if (currentFollowupIdx < selectedFollowups.length - 1) {
-          setCurrentFollowupIdx(prev => prev + 1);
-          setSecondsLeft(60);
-          setIsTimerRunning(true);
-          startRecording();
+          setCurrentFollowupIdx(prev => prev + 1); setSecondsLeft(60); setIsTimerRunning(true); startRecording();
         } else {
           setViewMode('review');
         }
@@ -459,7 +444,7 @@ export default function App() {
   };
 
   const handlePersonalityComplete = () => {
-    if (window.speechSynthesis) window.speechSynthesis.cancel(); // 🎙️ 다음으로 넘어갈 때 기존 음성 끄기
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
     const currentQ = selectedPersonality[currentPersonalityIdx];
     const isTail = currentTailIdx >= 0;
     const qText = isTail ? currentQ.tails[currentTailIdx] : currentQ.q;
@@ -479,42 +464,15 @@ export default function App() {
     setIsTimerRunning(false);
     setTimeout(() => {
       if (currentTailIdx < currentQ.assignedTailCount - 1) {
-        setCurrentTailIdx(prev => prev + 1);
-        setSecondsLeft(60);
-        setIsTimerRunning(true);
-        startRecording();
+        setCurrentTailIdx(prev => prev + 1); setSecondsLeft(60); setIsTimerRunning(true); startRecording();
       } else {
         if (currentPersonalityIdx < selectedPersonality.length - 1) {
-          setCurrentPersonalityIdx(prev => prev + 1);
-          setCurrentTailIdx(-1);
-          setSecondsLeft(60);
-          setIsTimerRunning(true);
-          startRecording();
+          setCurrentPersonalityIdx(prev => prev + 1); setCurrentTailIdx(-1); setSecondsLeft(60); setIsTimerRunning(true); startRecording();
         } else {
           setViewMode('personality_review');
         }
       }
     }, 500);
-  };
-
-  const startInterview = () => {
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-    if (interviewType === 'presentation') {
-      setPresentationAudio(null);
-      setFollowupAudios([]);
-      setSecondsLeft(180);
-      setViewMode('presentation');
-      setIsTimerRunning(true);
-      startRecording();
-    } else {
-      setPersonalityAudios([]);
-      setCurrentPersonalityIdx(0);
-      setCurrentTailIdx(-1);
-      setSecondsLeft(60); 
-      setViewMode('personality_active');
-      setIsTimerRunning(true);
-      startRecording();
-    }
   };
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
@@ -523,15 +481,10 @@ export default function App() {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 antialiased">
         <div className="max-w-sm w-full space-y-8 text-center">
-          <div className="flex justify-center">
-            <div className="p-4 bg-slate-50 rounded-full border border-slate-100"><Lock className="w-10 h-10 text-slate-400" /></div>
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-slate-950 tracking-tighter uppercase">Authorized Access</h1>
-            <p className="text-slate-500 text-sm mt-2 font-medium">관리자에게 발급받은 접속 코드를 입력하세요.</p>
-          </div>
+          <div className="flex justify-center"><div className="p-4 bg-slate-50 rounded-full border border-slate-100"><Lock className="w-10 h-10 text-slate-400" /></div></div>
+          <div><h1 className="text-2xl font-black text-slate-950 uppercase tracking-tighter">Authorized Access</h1><p className="text-slate-500 text-sm mt-2 font-medium">관리자에게 발급받은 접속 코드를 입력하세요.</p></div>
           <form onSubmit={handleAuth} className="space-y-4">
-            <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="Access Code" className={`w-full px-5 py-4 bg-slate-50 border ${isError ? 'border-red-500 animate-shake' : 'border-slate-200'} rounded-2xl text-center text-2xl font-bold text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-300 tracking-widest`} />
+            <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="Access Code" className={`w-full px-5 py-4 bg-slate-50 border ${isError ? 'border-red-500 animate-shake' : 'border-slate-200'} rounded-2xl text-center text-2xl font-bold text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all tracking-widest`} />
             <button className="w-full bg-slate-950 text-white py-4 rounded-2xl font-bold hover:bg-black transition-all shadow-lg">면접장 입장하기</button>
           </form>
         </div>
@@ -544,75 +497,24 @@ export default function App() {
       {viewMode === 'overview' && (
         <main className="max-w-md mx-auto flex flex-col min-h-screen pb-32 bg-white shadow-xl shadow-slate-100/50">
           <div className="p-5 pt-8 space-y-4 bg-white sticky top-0 z-10 border-b border-slate-50">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-xs font-bold text-slate-500">환영합니다, <span className="text-slate-900">{userName}</span>님!</span>
-            </div>
-            <div className="flex justify-between items-center pl-1">
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">면접 모드 선택</div>
-              <button onClick={handleRefresh} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-lg transition-colors active:scale-95">
-                <RefreshCw className="w-3.5 h-3.5" /> <span className="text-[10px] font-bold">문항 재설정</span>
-              </button>
-            </div>
+            <div className="flex items-center gap-2 mb-2"><div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div><span className="text-xs font-bold text-slate-500">환영합니다, <span className="text-slate-900">{userName}</span>님!</span></div>
+            <div className="flex justify-between items-center pl-1"><div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">면접 모드 선택</div><button onClick={handleRefresh} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-lg transition-colors active:scale-95"><RefreshCw className="w-3.5 h-3.5" /> <span className="text-[10px] font-bold">문항 재설정</span></button></div>
             <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => setInterviewType('presentation')} className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 transition-all duration-300 ${interviewType === 'presentation' ? 'bg-white border-blue-500 shadow-lg shadow-blue-100' : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}`}>
-                <Megaphone className={`w-8 h-8 mb-3 ${interviewType === 'presentation' ? 'text-blue-500' : 'text-slate-300'}`} />
-                <div className={`font-black text-lg ${interviewType === 'presentation' ? 'text-blue-600' : 'text-slate-400'}`}>발표면접</div>
-              </button>
-              <button onClick={() => setInterviewType('personality')} className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 transition-all duration-300 ${interviewType === 'personality' ? 'bg-white border-indigo-500 shadow-lg shadow-indigo-100' : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}`}>
-                <UserCheck className={`w-8 h-8 mb-3 ${interviewType === 'personality' ? 'text-indigo-500' : 'text-slate-300'}`} />
-                <div className={`font-black text-lg ${interviewType === 'personality' ? 'text-indigo-600' : 'text-slate-400'}`}>인성면접</div>
-              </button>
+              <button onClick={() => setInterviewType('presentation')} className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 transition-all duration-300 ${interviewType === 'presentation' ? 'bg-white border-blue-500 shadow-lg shadow-blue-100' : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}`}><Megaphone className={`w-8 h-8 mb-3 ${interviewType === 'presentation' ? 'text-blue-500' : 'text-slate-300'}`} /><div className={`font-black text-lg ${interviewType === 'presentation' ? 'text-blue-600' : 'text-slate-400'}`}>발표면접</div></button>
+              <button onClick={() => setInterviewType('personality')} className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 transition-all duration-300 ${interviewType === 'personality' ? 'bg-white border-indigo-500 shadow-lg shadow-indigo-100' : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}`}><UserCheck className={`w-8 h-8 mb-3 ${interviewType === 'personality' ? 'text-indigo-500' : 'text-slate-300'}`} /><div className={`font-black text-lg ${interviewType === 'personality' ? 'text-indigo-600' : 'text-slate-400'}`}>인성면접</div></button>
             </div>
           </div>
           
-          <div className="flex items-center justify-center gap-4 px-6 my-4">
-            <div className="h-[1px] bg-slate-100 flex-1"></div>
-            <div className="text-[11px] font-black text-slate-300 flex items-center gap-1.5 uppercase tracking-widest">
-              {interviewType === 'presentation' ? '1문항 + 맞춤 꼬리 5개 출제' : '10문항 + 0~3개 꼬리 출제'}
-            </div>
-            <div className="h-[1px] bg-slate-100 flex-1"></div>
-          </div>
-          
-          <div className="px-5 space-y-3 mt-2 flex-grow">
+          <div className="px-5 space-y-3 mt-4 flex-grow">
             {interviewType === 'personality' ? (
               selectedPersonality.map((q) => (
-                <div key={q.id} className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-indigo-300 hover:shadow-md transition-all shadow-sm">
-                  <div className="flex gap-4 items-start">
-                    <div className="bg-indigo-50 border border-indigo-100 text-indigo-600 font-bold text-xs px-2.5 py-1 rounded shrink-0 font-mono">Q.{q.id.toString().padStart(2, '0')}</div>
-                    <div className="space-y-2 pt-0.5 w-full">
-                      <div className="text-slate-700 text-sm leading-relaxed font-bold">{q.q}</div>
-                      {q.assignedTailCount > 0 ? (
-                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-50 border border-slate-100 rounded-md"><RotateCcw className="w-3 h-3 text-indigo-400" /><span className="text-slate-500 text-[10px] font-bold">꼬리질문 {q.assignedTailCount}개 대기중</span></div>
-                      ) : (
-                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-50 border border-slate-100 rounded-md"><CheckCircle2 className="w-3 h-3 text-slate-300" /><span className="text-slate-400 text-[10px] font-bold">단독 질문</span></div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <div key={q.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><div className="flex gap-4 items-start"><div className="bg-indigo-50 border border-indigo-100 text-indigo-600 font-bold text-xs px-2.5 py-1 rounded shrink-0 font-mono">Q.{q.id.toString().padStart(2, '0')}</div><div className="space-y-2 pt-0.5 w-full"><div className="text-slate-700 text-sm leading-relaxed font-bold">{q.q}</div>{q.assignedTailCount > 0 ? (<div className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-50 border border-slate-100 rounded-md"><RotateCcw className="w-3 h-3 text-indigo-400" /><span className="text-slate-500 text-[10px] font-bold">꼬리질문 {q.assignedTailCount}개 대기중</span></div>) : (<div className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-50 border border-slate-100 rounded-md"><CheckCircle2 className="w-3 h-3 text-slate-300" /><span className="text-slate-400 text-[10px] font-bold">단독 질문</span></div>)}</div></div></div>
               ))
             ) : (
-              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl shadow-slate-100/50 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600"></div>
-                <div className="pl-3">
-                  <div className="flex items-start justify-between gap-2 mb-4">
-                    <h2 className="text-lg font-bold text-slate-950 leading-snug pr-2">{currentTopic.title}</h2>
-                  </div>
-                  <div className="mb-4">
-                    <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-50 border border-slate-100 rounded-md"><RotateCcw className="w-3 h-3 text-blue-400" /><span className="text-slate-500 text-[10px] font-bold">맞춤 꼬리질문 5개 대기중</span></div>
-                  </div>
-                  <div className="bg-slate-50 rounded-2xl p-5 text-slate-700 leading-relaxed text-sm h-[260px] overflow-y-auto border border-slate-100 italic">{currentTopic.content}</div>
-                </div>
-              </div>
+              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl shadow-slate-100/50 relative overflow-hidden"><div className="absolute top-0 left-0 w-1.5 h-full bg-blue-600"></div><div className="pl-3"><div className="flex items-start justify-between gap-2 mb-4"><h2 className="text-lg font-bold text-slate-950 leading-snug pr-2">{currentTopic.title}</h2></div><div className="mb-4"><div className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-50 border border-slate-100 rounded-md"><RotateCcw className="w-3 h-3 text-blue-400" /><span className="text-slate-500 text-[10px] font-bold">맞춤 꼬리질문 5개 대기중</span></div></div><div className="bg-slate-50 rounded-2xl p-5 text-slate-700 leading-relaxed text-sm h-[260px] overflow-y-auto border border-slate-100 italic">{currentTopic.content}</div></div></div>
             )}
           </div>
-          <div className="fixed bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-white via-white to-transparent pointer-events-none">
-            <div className="max-w-md mx-auto pointer-events-auto">
-              <button onClick={startInterview} className={`w-full py-5 rounded-2xl font-black text-xl shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 ${interviewType === 'personality' ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'}`}>
-                {interviewType === 'personality' ? '인성면접 시작하기' : '발표면접 시작하기'}
-              </button>
-            </div>
-          </div>
+          <div className="fixed bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-white via-white to-transparent pointer-events-none"><div className="max-w-md mx-auto pointer-events-auto"><button onClick={startInterview} className={`w-full py-5 rounded-2xl font-black text-xl shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 ${interviewType === 'personality' ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200'}`}>{interviewType === 'personality' ? '인성면접 시작하기' : '발표면접 시작하기'}</button></div></div>
         </main>
       )}
 
@@ -620,20 +522,11 @@ export default function App() {
       {viewMode === 'presentation' && (
         <main className="max-w-lg mx-auto min-h-screen bg-white p-8 flex flex-col shadow-2xl">
           <div className="flex justify-between items-center mb-8 border-b border-slate-50 pb-4">
-            <div className="flex items-center gap-2 text-red-600 font-bold text-xs uppercase tracking-widest animate-pulse"><div className="w-2 h-2 bg-red-600 rounded-full" /> Recording</div>
-            <div className="flex items-center gap-4">
-              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest font-mono">Phase 01</span>
-              <button onClick={handleQuitInterview} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-400 hover:text-red-500 transition-colors"><Home className="w-5 h-5" /></button>
-            </div>
+            <div className="flex items-center gap-2 text-red-600 font-bold text-xs uppercase tracking-widest animate-pulse"><Volume2 className="w-4 h-4" /> Recording</div>
+            <button onClick={handleQuitInterview} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-400 hover:text-red-500"><Home className="w-5 h-5" /></button>
           </div>
-          <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 mb-8">
-            <h2 className="text-xl font-bold text-slate-950 mb-4">{currentTopic.title}</h2>
-            <p className="text-sm text-slate-700 leading-relaxed max-h-[220px] overflow-y-auto pr-2">{currentTopic.content}</p>
-          </div>
-          <div className="flex-grow flex flex-col items-center justify-center">
-             <div className="text-[110px] font-mono font-bold text-blue-600 tracking-tighter leading-none tabular-nums">{formatTime(secondsLeft)}</div>
-             <div className="w-full h-1.5 bg-slate-100 rounded-full mt-12 overflow-hidden max-w-[280px] mx-auto"><div className="h-full bg-blue-600 transition-all duration-1000 ease-linear" style={{width: `${(secondsLeft/180)*100}%`}}></div></div>
-          </div>
+          <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 mb-8"><h2 className="text-xl font-bold text-slate-950 mb-4">{currentTopic.title}</h2><p className="text-sm text-slate-700 leading-relaxed max-h-[220px] overflow-y-auto pr-2">{currentTopic.content}</p></div>
+          <div className="flex-grow flex flex-col items-center justify-center"><div className="text-[110px] font-mono font-bold text-blue-600 tracking-tighter leading-none tabular-nums">{formatTime(secondsLeft)}</div><div className="w-full h-1.5 bg-slate-100 rounded-full mt-12 overflow-hidden max-w-[280px] mx-auto"><div className="h-full bg-blue-600 transition-all duration-1000 ease-linear" style={{width: `${(secondsLeft/180)*100}%`}}></div></div></div>
           <button onClick={handleCompleteStep} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-bold text-lg shadow-lg mt-6">답변 완료</button>
         </main>
       )}
@@ -641,45 +534,10 @@ export default function App() {
       {/* 발표면접 꼬리질문 화면 */}
       {viewMode === 'followup' && (
         <main className="max-w-md mx-auto min-h-screen bg-white p-10 flex flex-col justify-center shadow-2xl">
-          <div className="mb-12 flex justify-between items-center w-full">
-             <div className="text-blue-700 font-bold text-sm tracking-widest uppercase font-mono flex items-center gap-2">Follow-up {currentFollowupIdx + 1} / {selectedFollowups.length} <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse" /></div>
-             <button onClick={handleQuitInterview} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-400 hover:text-red-500 transition-colors"><Home className="w-5 h-5" /></button>
-          </div>
+          <div className="mb-12 flex justify-between items-center w-full"><div className="text-blue-700 font-bold text-sm tracking-widest uppercase font-mono flex items-center gap-2">Follow-up {currentFollowupIdx + 1} / {selectedFollowups.length} <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse" /></div><button onClick={handleQuitInterview} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-400 hover:text-red-500"><Home className="w-5 h-5" /></button></div>
           <h2 className="text-2xl font-bold mb-20 leading-snug text-slate-950">"{selectedFollowups[currentFollowupIdx]}"</h2>
-          <div className="flex items-center gap-6 mb-24">
-            <span className="text-6xl font-mono font-bold text-blue-600 tabular-nums">{formatTime(secondsLeft)}</span>
-            <div className="flex-grow h-2.5 bg-slate-100 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-blue-600 transition-all duration-1000" style={{width: `${(secondsLeft/60)*100}%`}}></div></div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mt-auto">
-            <button onClick={handleCompleteStep} className="bg-slate-100 text-slate-500 py-4 rounded-xl font-bold text-sm hover:bg-slate-200">건너뛰기</button>
-            <button onClick={handleCompleteStep} className="bg-blue-600 text-white py-4 rounded-xl font-bold text-sm shadow-lg shadow-blue-100">답변 완료</button>
-          </div>
-        </main>
-      )}
-
-      {/* 발표면접 리뷰 화면 */}
-      {viewMode === 'review' && (
-        <main className="max-w-2xl mx-auto px-6 py-12 space-y-10 bg-white min-h-screen">
-          <div className="text-center mb-10 space-y-4">
-            <div className="inline-block p-4 bg-blue-50 rounded-full border border-blue-100"><ShieldCheck className="w-10 h-10 text-blue-600" /></div>
-            <h1 className="text-3xl font-black text-slate-950 tracking-tighter uppercase">Presentation Review</h1>
-          </div>
-          <div className="bg-slate-50 rounded-[2.5rem] p-8 border border-slate-100 space-y-4 shadow-sm">
-            <div className="font-bold text-slate-900 text-lg leading-tight">{currentTopic.title}</div>
-            <audio src={presentationAudio || ''} controls className="w-full h-12" />
-          </div>
-          {followupAudios.length > 0 && (
-            <div className="space-y-4 pt-6">
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] ml-2">Follow-up Records</div>
-              {followupAudios.map((audio, i) => (
-                <div key={i} className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-4 hover:border-blue-200 transition-all">
-                  <div className="text-sm font-bold flex gap-4 text-slate-950 leading-relaxed"><span className="text-blue-600 shrink-0 font-black">Q{i+1}.</span><span>{audio.question}</span></div>
-                  <audio src={audio.url} controls className="w-full h-10 opacity-90" />
-                </div>
-              ))}
-            </div>
-          )}
-          <button onClick={() => setViewMode('overview')} className="w-full bg-slate-950 text-white py-6 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 hover:bg-black transition-all mt-12 shadow-xl shadow-slate-200"><RotateCcw className="w-5 h-5" /> 처음 화면으로 이동</button>
+          <div className="flex items-center gap-6 mb-24"><span className="text-6xl font-mono font-bold text-blue-600 tabular-nums">{formatTime(secondsLeft)}</span><div className="flex-grow h-2.5 bg-slate-100 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-blue-600 transition-all duration-1000" style={{width: `${(secondsLeft/60)*100}%`}}></div></div></div>
+          <div className="grid grid-cols-2 gap-4 mt-auto"><button onClick={handleCompleteStep} className="bg-slate-100 text-slate-500 py-4 rounded-xl font-bold text-sm hover:bg-slate-200">건너뛰기</button><button onClick={handleCompleteStep} className="bg-blue-600 text-white py-4 rounded-xl font-bold text-sm shadow-lg shadow-blue-100">답변 완료</button></div>
         </main>
       )}
 
@@ -687,57 +545,63 @@ export default function App() {
       {viewMode === 'personality_active' && (
         <main className="max-w-md mx-auto min-h-screen bg-white p-10 flex flex-col justify-center shadow-2xl border-t-8 border-indigo-600">
           <div className="mb-12 flex justify-between items-center w-full">
-            <div className="text-indigo-600 font-bold text-sm tracking-widest uppercase font-mono flex items-center gap-2">
-              {currentTailIdx === -1 
-                ? `Q.${String(currentPersonalityIdx + 1).padStart(2, '0')} 메인 질문` 
-                : `Q.${String(currentPersonalityIdx + 1).padStart(2, '0')} 꼬리질문 ${currentTailIdx + 1}`}
-              <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse ml-2" />
-            </div>
-            <button onClick={handleQuitInterview} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-400 hover:text-red-500 transition-colors"><Home className="w-5 h-5" /></button>
+            <div className="text-indigo-600 font-bold text-sm tracking-widest uppercase font-mono flex items-center gap-2">{currentTailIdx === -1 ? `Q.${String(currentPersonalityIdx + 1).padStart(2, '0')} 메인 질문` : `Q.${String(currentPersonalityIdx + 1).padStart(2, '0')} 꼬리질문 ${currentTailIdx + 1}`}<div className="w-2 h-2 bg-red-600 rounded-full animate-pulse ml-2" /></div>
+            <button onClick={handleQuitInterview} className="p-2 bg-slate-50 hover:bg-slate-100 rounded-full text-slate-400 hover:text-red-500"><Home className="w-5 h-5" /></button>
           </div>
-          <h2 className="text-2xl font-bold mb-20 leading-snug text-slate-950">
-            "{currentTailIdx === -1 ? selectedPersonality[currentPersonalityIdx].q : selectedPersonality[currentPersonalityIdx].tails[currentTailIdx]}"
-          </h2>
-          <div className="flex items-center gap-6 mb-24">
-            <span className="text-6xl font-mono font-bold text-indigo-600 tabular-nums">{formatTime(secondsLeft)}</span>
-            <div className="flex-grow h-2.5 bg-slate-100 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-indigo-600 transition-all duration-1000" style={{width: `${(secondsLeft/60)*100}%`}}></div></div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mt-auto">
-            <button onClick={handlePersonalityComplete} className="bg-slate-100 text-slate-500 py-4 rounded-xl font-bold text-sm hover:bg-slate-200">건너뛰기</button>
-            <button onClick={handlePersonalityComplete} className="bg-indigo-600 text-white py-4 rounded-xl font-bold text-sm shadow-lg shadow-indigo-100">답변 완료</button>
-          </div>
+          <h2 className="text-2xl font-bold mb-20 leading-snug text-slate-950">"{currentTailIdx === -1 ? selectedPersonality[currentPersonalityIdx].q : selectedPersonality[currentPersonalityIdx].tails[currentTailIdx]}"</h2>
+          <div className="flex items-center gap-6 mb-24"><span className="text-6xl font-mono font-bold text-indigo-600 tabular-nums">{formatTime(secondsLeft)}</span><div className="flex-grow h-2.5 bg-slate-100 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-indigo-600 transition-all duration-1000" style={{width: `${(secondsLeft/60)*100}%`}}></div></div></div>
+          <div className="grid grid-cols-2 gap-4 mt-auto"><button onClick={handlePersonalityComplete} className="bg-slate-100 text-slate-500 py-4 rounded-xl font-bold text-sm hover:bg-slate-200">건너뛰기</button><button onClick={handlePersonalityComplete} className="bg-indigo-600 text-white py-4 rounded-xl font-bold text-sm shadow-lg shadow-indigo-100">답변 완료</button></div>
         </main>
       )}
 
-      {viewMode === 'personality_review' && (
-        <main className="max-w-2xl mx-auto px-6 py-12 space-y-8 bg-white min-h-screen">
-          <div className="text-center mb-10 space-y-4">
-            <div className="inline-block p-4 bg-indigo-50 rounded-full border border-indigo-100"><ShieldCheck className="w-10 h-10 text-indigo-600" /></div>
-            <h1 className="text-3xl font-black text-slate-950 tracking-tighter uppercase">Personality Review</h1>
+      {/* 📝 리뷰 및 셀프 피드백 화면 */}
+      {(viewMode === 'review' || viewMode === 'personality_review') && (
+        <main className="max-w-2xl mx-auto px-6 py-12 space-y-10 bg-white min-h-screen">
+          <div className="text-center space-y-4">
+            <div className="inline-block p-4 bg-slate-50 rounded-full border"><ClipboardList className="w-10 h-10 text-slate-600" /></div>
+            <h1 className="text-3xl font-black text-slate-950 uppercase tracking-tighter">Self Feedback</h1>
+            <p className="text-slate-500 text-sm">답변을 다시 듣고 점수와 피드백을 기록하세요.</p>
           </div>
+          
           <div className="space-y-6">
-            {selectedPersonality.map((q) => {
-              const relatedAudios = personalityAudios.filter(audio => audio.qId === q.id);
-              if (relatedAudios.length === 0) return null;
-              return (
-                <div key={q.id} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded">Q.{q.id.toString().padStart(2, '0')}</span>
-                  </div>
-                  {relatedAudios.map((audio, idx) => (
-                    <div key={idx} className={`space-y-3 ${audio.isTail ? 'pl-4 border-l-2 border-indigo-100 ml-2 mt-4' : ''}`}>
-                      <div className="text-sm font-bold text-slate-900 leading-relaxed flex gap-2">
-                        {audio.isTail && <RotateCcw className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />}
-                        <span>{audio.questionText}</span>
-                      </div>
-                      <audio src={audio.url} controls className="w-full h-10 opacity-90" />
-                    </div>
-                  ))}
+            {viewMode === 'review' && presentationAudio && (
+              <div className="bg-slate-50 rounded-3xl p-8 border border-slate-100 space-y-4 shadow-sm">
+                <div className="flex justify-between items-center"><div className="font-bold text-slate-900 text-lg leading-tight">{currentTopic.title}</div><a href={presentationAudio} download={`${userName}_발표답변.wav`} className="text-blue-600 text-xs font-bold bg-white px-3 py-1.5 rounded-lg border flex items-center gap-1"><Download className="w-3 h-3" /> 저장</a></div>
+                <audio src={presentationAudio} controls className="w-full h-12" />
+              </div>
+            )}
+
+            {(viewMode === 'review' ? followupAudios : personalityAudios).map((audio: any, i: number) => (
+              <div key={i} className="bg-white border-2 border-slate-100 rounded-3xl p-6 shadow-sm space-y-4">
+                <div className="flex justify-between items-start gap-4">
+                  <div className="text-sm font-bold text-slate-950 leading-relaxed"><span className="text-blue-600 mr-2">Q{i+1}.</span>{audio.questionText || audio.question}</div>
+                  <a href={audio.url} download={`${userName}_답변${i+1}.wav`} className="shrink-0 text-blue-600 text-[10px] font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100 flex items-center gap-1"><Download className="w-3 h-3" /> 저장</a>
                 </div>
-              );
-            })}
+                
+                <audio src={audio.url} controls className="w-full h-10" />
+
+                {/* ⭐ 자가 점수 및 메모 입력부 */}
+                <div className="pt-4 border-t border-slate-50 space-y-3">
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs font-black text-slate-400 uppercase">Score</span>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <button key={star} onClick={() => setScores(prev => ({...prev, [i]: star}))} className={`transition-colors ${scores[i] >= star ? 'text-yellow-400' : 'text-slate-200'}`}><Star className="w-5 h-5 fill-current" /></button>
+                      ))}
+                    </div>
+                  </div>
+                  <textarea 
+                    placeholder="부족했던 키워드나 태도를 메모하세요..."
+                    value={feedbackNotes[i] || ''}
+                    onChange={(e) => setFeedbackNotes(prev => ({...prev, [i]: e.target.value}))}
+                    className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+                  />
+                </div>
+              </div>
+            ))}
           </div>
-          <button onClick={() => setViewMode('overview')} className="w-full bg-slate-950 text-white py-6 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 hover:bg-black transition-all mt-12 shadow-xl shadow-slate-200"><RotateCcw className="w-5 h-5" /> 처음 화면으로 이동</button>
+
+          <button onClick={() => setViewMode('overview')} className="w-full bg-slate-950 text-white py-6 rounded-2xl font-bold text-lg shadow-xl transition-transform active:scale-95">기록 완료 및 처음으로</button>
         </main>
       )}
     </div>
