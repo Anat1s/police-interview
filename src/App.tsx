@@ -4,19 +4,17 @@ import { ShieldCheck, Lock, RefreshCw, RotateCcw, CheckCircle2, Home, Megaphone,
 // ==========================================
 // 🎙️ [음성 출력(TTS) 함수 - PC 버그 해결 버전]
 // ==========================================
-// PC 크롬의 메모리 삭제(Garbage Collection) 버그 방지용 전역 변수
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 
 const speakText = (text: string) => {
   if (typeof window !== 'undefined' && window.speechSynthesis) {
-    window.speechSynthesis.cancel(); // 기존 음성 즉시 멈춤
+    window.speechSynthesis.cancel(); 
 
     currentUtterance = new SpeechSynthesisUtterance(text);
     currentUtterance.lang = 'ko-KR';
-    currentUtterance.rate = 0.95; // 살짝 진중한 속도
+    currentUtterance.rate = 0.95; 
     currentUtterance.pitch = 0.9;
     
-    // 한국어 보이스 매칭
     const voices = window.speechSynthesis.getVoices();
     const koVoice = voices.find(v => v.lang.includes('KR') || v.lang.includes('ko'));
     if (koVoice) currentUtterance.voice = koVoice;
@@ -307,25 +305,23 @@ export default function App() {
   const [currentTailIdx, setCurrentTailIdx] = useState(-1); 
   const [personalityAudios, setPersonalityAudios] = useState<PersonalityAudio[]>([]);
 
-  // 📝 자가 진단 메모 및 점수
   const [feedbackNotes, setFeedbackNotes] = useState<Record<string, string>>({});
   const [scores, setScores] = useState<Record<string, number>>({});
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // 🎙️ 음성 로드 초기화 (PC 보이스 인식용)
   useEffect(() => {
     if (window.speechSynthesis) window.speechSynthesis.getVoices();
   }, []);
 
-  // 🎙️ 음성 출력 트리거 (Effect)
+  // 🎙️ 발표면접 주제 출력 관련 코드를 완전히 날렸습니다. 
   useEffect(() => {
     if (!isAuthorized) return;
     
-    if (viewMode === 'presentation') {
-      // 발표면접 주제는 읽지 않도록 삭제 처리 완료
-    } else if (viewMode === 'followup') {
+    // 발표 주제 읽는 코드는 흔적도 없이 삭제됨!
+    
+    if (viewMode === 'followup') {
       speakText(`꼬리질문입니다. ${selectedFollowups[currentFollowupIdx]}`);
     } else if (viewMode === 'personality_active') {
       const q = selectedPersonality[currentPersonalityIdx];
@@ -364,11 +360,10 @@ export default function App() {
     else setupRandomPersonality();
   };
 
-  // 🎙️ PC 크롬 버그 해결을 위한 빈 공백 소리 출력 (권한 획득용)
   const unlockAudio = () => { 
     if (window.speechSynthesis) {
       const dummy = new SpeechSynthesisUtterance(" ");
-      dummy.volume = 0; // 소리 안 나게 처리
+      dummy.volume = 0; 
       window.speechSynthesis.speak(dummy);
     } 
   };
