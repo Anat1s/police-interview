@@ -2,6 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ShieldCheck, Lock, RefreshCw, RotateCcw, CheckCircle2, Home, Megaphone, UserCheck } from 'lucide-react';
 
 // ==========================================
+// 🎙️ [음성 출력(TTS) 도우미 함수]
+// 브라우저 내장 기능을 이용해 면접관처럼 질문을 읽어줍니다.
+// ==========================================
+const speakText = (text: string) => {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel(); // 기존에 나오던 음성이 있다면 즉시 중단
+  
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'ko-KR';
+  utterance.rate = 0.95; // 면접관처럼 살짝 진중하고 또렷한 속도
+  utterance.pitch = 0.9; // 약간 차분한 톤
+  
+  window.speechSynthesis.speak(utterance);
+};
+
+// ==========================================
 // 🔐 [권한 관리 시스템] 허가된 사용자 명단
 // ==========================================
 const AUTHORIZED_USERS: Record<string, string> = {
@@ -16,22 +32,17 @@ const AUTHORIZED_USERS: Record<string, string> = {
   "4380": "남지윤",
   "0359": "심주혜",
   "2830": "진민영",
-  "0223": "이수빈",
+  "0223": "이수빈", // 승기 여친
 
   // --- 온라인 특강반 ---
-  "1245": "강진우",
-  "9031": "김서현",
-  "6478": "김수련",
   "3192": "김영선",
   "8504": "김진이",
   "4721": "나한결",
   "7619": "민희경",
   "5283": "양연주",
-  "1067": "오서연",
   "9350": "이대희",
   "2594": "이민찬",
   "7777": "올킬면접 조교", // 특별 번호
-  "3409": "이수민",
   "8162": "이언지",
   "5947": "이현지",
   "4026": "이혜원",
@@ -315,6 +326,30 @@ export default function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
+  // 🎙️ [TTS 연동] 발표면접 음성 출력 
+  useEffect(() => {
+    if (viewMode === 'presentation') {
+      speakText(`발표면접 주제입니다. ${currentTopic.title}. ${currentTopic.content}`);
+    } else if (viewMode === 'followup') {
+      speakText(`꼬리질문입니다. ${selectedFollowups[currentFollowupIdx]}`);
+    }
+  }, [viewMode, currentFollowupIdx, currentTopic, selectedFollowups]);
+
+  // 🎙️ [TTS 연동] 인성면접 음성 출력
+  useEffect(() => {
+    if (viewMode === 'personality_active') {
+      const currentQ = selectedPersonality[currentPersonalityIdx];
+      if (!currentQ) return;
+      
+      const textToSpeak = currentTailIdx === -1 
+        ? `질문입니다. ${currentQ.q}` 
+        : `꼬리질문입니다. ${currentQ.tails[currentTailIdx]}`;
+        
+      speakText(textToSpeak);
+    }
+  }, [viewMode, currentPersonalityIdx, currentTailIdx, selectedPersonality]);
+
+
   useEffect(() => { 
     setupRandomPresentation(); 
     setupRandomPersonality();
@@ -378,6 +413,7 @@ export default function App() {
   };
 
   const handleQuitInterview = () => {
+    if (window.speechSynthesis) window.speechSynthesis.cancel(); // 🎙️ 홈으로 갈 때 음성 끄기
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.onstop = null; 
       mediaRecorderRef.current.stop();
@@ -389,6 +425,7 @@ export default function App() {
   };
 
   const handleCompleteStep = () => {
+    if (window.speechSynthesis) window.speechSynthesis.cancel(); // 🎙️ 다음으로 넘어갈 때 기존 음성 끄기
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
@@ -422,6 +459,7 @@ export default function App() {
   };
 
   const handlePersonalityComplete = () => {
+    if (window.speechSynthesis) window.speechSynthesis.cancel(); // 🎙️ 다음으로 넘어갈 때 기존 음성 끄기
     const currentQ = selectedPersonality[currentPersonalityIdx];
     const isTail = currentTailIdx >= 0;
     const qText = isTail ? currentQ.tails[currentTailIdx] : currentQ.q;
@@ -460,6 +498,7 @@ export default function App() {
   };
 
   const startInterview = () => {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
     if (interviewType === 'presentation') {
       setPresentationAudio(null);
       setFollowupAudios([]);
@@ -644,7 +683,7 @@ export default function App() {
         </main>
       )}
 
-      {/* 인성면접 진행 및 리뷰 화면 (간략화된 예시, 기존 로직 유지) */}
+      {/* 인성면접 진행 화면 */}
       {viewMode === 'personality_active' && (
         <main className="max-w-md mx-auto min-h-screen bg-white p-10 flex flex-col justify-center shadow-2xl border-t-8 border-indigo-600">
           <div className="mb-12 flex justify-between items-center w-full">
