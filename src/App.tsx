@@ -2,22 +2,26 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ShieldCheck, Lock, RefreshCw, RotateCcw, CheckCircle2, Home, Megaphone, UserCheck, Download, ClipboardList, Star, Volume2 } from 'lucide-react';
 
 // ==========================================
-// 🎙️ [음성 출력(TTS) 함수]
+// 🎙️ [음성 출력(TTS) 함수 - PC 버그 해결 버전]
 // ==========================================
+// PC 크롬의 메모리 삭제(Garbage Collection) 버그 방지용 전역 변수
+let currentUtterance: SpeechSynthesisUtterance | null = null;
+
 const speakText = (text: string) => {
   if (typeof window !== 'undefined' && window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'ko-KR';
-    utterance.rate = 0.95; // 살짝 진중한 속도
-    utterance.pitch = 0.9;
+    window.speechSynthesis.cancel(); // 기존 음성 즉시 멈춤
+
+    currentUtterance = new SpeechSynthesisUtterance(text);
+    currentUtterance.lang = 'ko-KR';
+    currentUtterance.rate = 0.95; // 살짝 진중한 속도
+    currentUtterance.pitch = 0.9;
     
     // 한국어 보이스 매칭
     const voices = window.speechSynthesis.getVoices();
     const koVoice = voices.find(v => v.lang.includes('KR') || v.lang.includes('ko'));
-    if (koVoice) utterance.voice = koVoice;
+    if (koVoice) currentUtterance.voice = koVoice;
 
-    window.speechSynthesis.speak(utterance);
+    window.speechSynthesis.speak(currentUtterance);
   }
 };
 
@@ -310,11 +314,17 @@ export default function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
+  // 🎙️ 음성 로드 초기화 (PC 보이스 인식용)
+  useEffect(() => {
+    if (window.speechSynthesis) window.speechSynthesis.getVoices();
+  }, []);
+
   // 🎙️ 음성 출력 트리거 (Effect)
   useEffect(() => {
     if (!isAuthorized) return;
+    
     if (viewMode === 'presentation') {
-      speakText(`발표면접 주제입니다. ${currentTopic.title}. ${currentTopic.content}`);
+      // 발표면접 주제는 읽지 않도록 삭제 처리 완료
     } else if (viewMode === 'followup') {
       speakText(`꼬리질문입니다. ${selectedFollowups[currentFollowupIdx]}`);
     } else if (viewMode === 'personality_active') {
@@ -324,7 +334,7 @@ export default function App() {
         speakText(text);
       }
     }
-  }, [viewMode, currentFollowupIdx, currentPersonalityIdx, currentTailIdx, isAuthorized, currentTopic, selectedFollowups, selectedPersonality]);
+  }, [viewMode, currentFollowupIdx, currentPersonalityIdx, currentTailIdx, isAuthorized, selectedFollowups, selectedPersonality]);
 
   useEffect(() => { 
     setupRandomPresentation(); 
@@ -354,7 +364,14 @@ export default function App() {
     else setupRandomPersonality();
   };
 
-  const unlockAudio = () => { if (window.speechSynthesis) window.speechSynthesis.speak(new SpeechSynthesisUtterance("")); };
+  // 🎙️ PC 크롬 버그 해결을 위한 빈 공백 소리 출력 (권한 획득용)
+  const unlockAudio = () => { 
+    if (window.speechSynthesis) {
+      const dummy = new SpeechSynthesisUtterance(" ");
+      dummy.volume = 0; // 소리 안 나게 처리
+      window.speechSynthesis.speak(dummy);
+    } 
+  };
 
   const handleAuth = (e: React.FormEvent) => {
     e.preventDefault();
